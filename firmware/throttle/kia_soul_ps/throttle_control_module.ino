@@ -44,14 +44,11 @@
 //
 #define CAN_BAUD (CAN_500KBPS)
 
-
 //
 #define SERIAL_DEBUG_BAUD (115200)
 
-
 //
 #define CAN_INIT_RETRY_DELAY (50)
-
 
 //
 #ifdef PSYNC_DEBUG_FLAG
@@ -60,14 +57,11 @@
     #define DEBUG_PRINT(x)
 #endif
 
-
 // ms
 #define PS_CTRL_RX_WARN_TIMEOUT (250)
 
-
 //
 #define GET_TIMESTAMP_MS() ((uint32_t) millis())
-
 
 // Threshhold to detect when a person is pressing accelerator
 #define PEDAL_THRESH 1000
@@ -144,7 +138,7 @@ static void init_serial( void )
 }
 
 //
-static void init_can ( void )
+static void init_can( void )
 {
     // wait until we have initialized
     while( CAN.begin( CAN_BAUD ) != CAN_OK )
@@ -216,7 +210,6 @@ uint8_t incomingSerialByte;
 // a function to set the DAC output registers
 void setDAC( uint16_t data, char channel )
 {
-
     uint8_t message[ 2 ];
 
     // Set DAC A enable
@@ -279,7 +272,8 @@ void enableControl( )
     setDAC( PSensL_current, 'A' );
     latchDAC( );
 
-    // TODO: check if the DAC value and the sensed values are the same. If not, return an error and do NOT enable the sigint relays.
+    // TODO: check if the DAC value and the sensed values are the same.
+    // If not, return an error and do NOT enable the sigint relays.
 
     // enable the signal interrupt relays
     digitalWrite( PSENS_LOW_SIGINT, LOW );
@@ -335,6 +329,24 @@ void calculatePedalSpoof( float pedalPosition )
     //Serial.println(PSpoofH);
 }
 
+void check_pedal_override( )
+{
+    if ( ( PSensL_current + PSensH_current) / 2 > PEDAL_THRESH )
+    {
+        disableControl( );
+        local_override = 1;
+    }
+    else
+    {
+        local_override = 0;
+    }
+}
+
+void check_spoof_voltage( )
+{
+
+}
+
 
 /* ====================================== */
 /* =========== COMMUNICATIONS =========== */
@@ -382,7 +394,7 @@ static void publish_ps_ctrl_throttle_report( void )
     // set DLC
     tx_frame_ps_ctrl_throttle_report.dlc = 8; //TODO
 
-    // set override flag
+    // set override flag (bit 57)
     data->override = local_override;
 
     //// Set Pedal Command (PC)
@@ -578,7 +590,7 @@ void loop( )
     // if someone is pressing the throttle pedal disable control
     if ( ( PSensL_current + PSensH_current) / 2 > PEDAL_THRESH )
     {
-        disableControl();
+        disableControl( );
         local_override = 1;
     }
     else
@@ -586,8 +598,16 @@ void loop( )
         local_override = 0;
     }
 
+    /* Begin Untested */
+
+    check_pedal_override( );
+
+    check_spoof_voltage( );
+
+    /* End Untested */
+
     // read and parse incoming serial commands
-    if ( Serial.available() > 0 )
+    if ( Serial.available( ) > 0 )
     {
         incomingSerialByte = Serial.read( );
         processSerialByte( );

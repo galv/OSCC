@@ -268,7 +268,8 @@ void enableControl( )
 	setDAC( TSensL_current, 'B' );
 	latchDAC( );
 
-	// TODO: check if the DAC value and the sensed values are the same. If not, return an error and do NOT enable the sigint relays.
+	// TODO: check if the DAC value and the sensed values are the same.
+    // If not, return an error and do NOT enable the sigint relays.
 
 	// Enable the signal interrupt relays
 	digitalWrite( TSENS_LOW_SIGINT, LOW );
