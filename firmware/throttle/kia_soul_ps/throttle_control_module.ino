@@ -24,7 +24,7 @@
 //    Seed Studio CAN-BUS Shield, v1.2 (MCP2515)
 //    Sainsmart 4 relay module
 //    ETT ET-MINI SPI DAC (MCP4922)
-// J Hartung, 2015; D Fernández, 2016
+// J Hartung, 2015; E Livingston, L Buckland, D Fernández, 2016
 
 #include <SPI.h>
 #include <PID_v1.h>
@@ -166,16 +166,16 @@ static void init_can( void )
 #define DAC_PWR             A5
 
 // Sensor wire from the accelerator sensor, low values
-#define PSENS_LOW           A2
+#define PSENS_LOW           A0
 
 // Sensing input for the DAC output
-#define PSENS_LOW_SPOOF     A0
+#define PSENS_LOW_SPOOF     A2
 
 // Sensor wire from the accelerator sensor, high values
-#define PSENS_HIGH          A3
+#define PSENS_HIGH          A1
 
 // Sensing input for the DAC output
-#define PSENS_HIGH_SPOOF    A1
+#define PSENS_HIGH_SPOOF    A3
 
 // Signal interrupt (relay) for low accelerator values (XXX wire)
 #define PSENS_LOW_SIGINT    6
@@ -193,7 +193,8 @@ uint16_t PSensL_current,        // Current measured accel sensor values
 can_frame_s can_frame;
 
 bool controlEnable_req,
-     controlEnabled;
+     controlEnabled,
+     initialADC;
 
 int local_override = 0;
 
@@ -342,8 +343,59 @@ void check_pedal_override( )
     }
 }
 
-void check_spoof_voltage( )
+void check_spoof_voltage( bool firstADC )
 {
+    if ( firstADC == true )
+    {
+        return;
+    }
+
+    int psens_l_signal_read = 0;
+    int psens_h_signal_read = 0;
+    int spoof_l_signal_read = 0;
+    int spoof_h_signal_read = 0;
+
+    float psens_l_voltage_read = 0;
+    float psens_h_voltage_read = 0;
+    float spoof_l_voltage_read = 0;
+    float spoof_h_voltage_read = 0;
+
+    // energize the relay so we can read the values at the terminal
+    digitalWrite( PSENS_LOW_SIGINT, HIGH );
+
+    psens_l_signal_read = analogRead( PSENS_LOW );
+    psens_h_signal_read = analogRead( PSENS_HIGH );
+    spoof_l_signal_read = analogRead( PSENS_LOW_SPOOF );
+    spoof_h_signal_read = analogRead( PSENS_HIGH_SPOOF );
+
+    psens_l_voltage_read = psens_l_signal_read * 5.0 / 1024.0;
+    psens_h_voltage_read = psens_h_signal_read * 5.0 / 1024.0;
+    spoof_l_voltage_read = spoof_l_signal_read * 5.0 / 1024.0;
+    spoof_h_voltage_read = spoof_h_signal_read * 5.0 / 1024.0;
+
+    Serial.print( "Psens Low Value: " );
+    Serial.print( psens_l_signal_read );
+    Serial.print( "\tPsens Low Voltage: " );
+    Serial.println( psens_l_voltage_read, 3 );
+
+    Serial.print( "Spoof Low Value: " );
+    Serial.print( spoof_l_signal_read );
+    Serial.print( "\tSpoof Low Voltage: " );
+    Serial.println( spoof_l_voltage_read, 3 );
+
+    Serial.print( "Psens High Value: " );
+    Serial.print( psens_l_signal_read );
+    Serial.print( "\tPsens High Voltage: " );
+    Serial.println( psens_l_voltage_read, 3 );
+
+    Serial.print( "Spoof High Value: " );
+    Serial.print( spoof_h_signal_read );
+    Serial.print( "\tSpoof High Voltage: " );
+    Serial.println( spoof_h_voltage_read, 3 );
+
+    //debug signals then writeout fail criteria.
+    //disableControl( );
+    //local_override = 1;
 
 }
 
@@ -565,6 +617,9 @@ void setup( )
 
     // debug log
     DEBUG_PRINT( "init: pass" );
+
+    // skip first iteration of DAC/ADC diagnostic test
+    initialADC = true;
 }
 
 
@@ -602,7 +657,7 @@ void loop( )
 
     check_pedal_override( );
 
-    check_spoof_voltage( );
+    check_spoof_voltage( initialADC );
 
     /* End Untested */
 
@@ -629,5 +684,8 @@ void loop( )
         setDAC( PSpoofH, 'B' );
         setDAC( PSpoofL, 'A' );
         latchDAC( );
+
+        //check_spoof_voltage( initialADC );
     }
+    initialADC = false;
 }
