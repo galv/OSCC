@@ -28,15 +28,17 @@
 
 #include <SPI.h>
 #include <PID_v1.h>
-
 #include "mcp_can.h"
 #include "can_frame.h"
 #include "control_protocol_can.h"
 
 
+
+
 // *****************************************************
 // static global types/macros
 // *****************************************************
+
 
 // set CAN_CS to pin 9 for CAN
 #define CAN_CS 9
@@ -67,9 +69,12 @@
 #define PEDAL_THRESH 1000
 
 
+
+
 // *****************************************************
 // static global data
 // *****************************************************
+
 
 //
 static uint32_t last_update_ms;
@@ -84,9 +89,12 @@ static can_frame_s rx_frame_ps_ctrl_throttle_command;
 static can_frame_s tx_frame_ps_ctrl_throttle_report;
 
 
+
+
 // *****************************************************
 // static declarations
 // *****************************************************
+
 
 // corrects for overflow condition
 static void get_update_time_delta_ms(
@@ -192,24 +200,27 @@ uint16_t PSensL_current,        // Current measured accel sensor values
 // CAN message structs
 can_frame_s can_frame;
 
-bool controlEnable_req,
-     controlEnabled,
-     initialADC;
+bool control_enable_req,
+     control_enabled,
+     initial_ADC;
 
 int local_override = 0;
 
-double pedalPosition_target,
-       pedalPosition;
+double pedal_position_target,
+       pedal_position;
 
-uint8_t incomingSerialByte;
+uint8_t incoming_serial_byte;
+
+
 
 
 /* ====================================== */
 /* ============== CONTROL =============== */
 /* ====================================== */
 
+
 // a function to set the DAC output registers
-void setDAC( uint16_t data, char channel )
+void set_DAC( uint16_t data, char channel )
 {
     uint8_t message[ 2 ];
 
@@ -240,10 +251,10 @@ void setDAC( uint16_t data, char channel )
 }
 
 // a function to set the DAC output
-void latchDAC( )
+void latch_DAC( )
 {
     // pulse the LDAC line to send registers to DAC out.
-    // must have set DAC registers with setDAC() first for this to do anything.
+    // must have set DAC registers with set_DAC() first for this to do anything.
     digitalWrite( LDAC, LOW );
 
     delayMicroseconds( 50 );
@@ -252,7 +263,7 @@ void latchDAC( )
 }
 
 // a function to enable TCM to take control
-void enableControl( )
+void enable_control( )
 {
     // do a quick average to smooth out the noisy data
     static int AVG_max = 20;  // Total number of samples to average over
@@ -269,9 +280,9 @@ void enableControl( )
     PSensH_current = readingsH / AVG_max;
 
     // write measured torque values to DAC to avoid a signal discontinuity
-    setDAC( PSensH_current, 'B' );
-    setDAC( PSensL_current, 'A' );
-    latchDAC( );
+    set_DAC( PSensH_current, 'B' );
+    set_DAC( PSensL_current, 'A' );
+    latch_DAC( );
 
     // TODO: check if the DAC value and the sensed values are the same.
     // If not, return an error and do NOT enable the sigint relays.
@@ -280,12 +291,12 @@ void enableControl( )
     digitalWrite( PSENS_LOW_SIGINT, LOW );
     digitalWrite( PSENS_HIGH_SIGINT, LOW );
 
-    controlEnabled = true;
+    control_enabled = true;
 
 }
 
 // a function to disable TCM control
-void disableControl( )
+void disable_control( )
 {
     // do a quick average to smooth out the noisy data
     static int AVG_max = 20;  // Total number of samples to average over
@@ -301,25 +312,26 @@ void disableControl( )
     PSensH_current = readingsH / AVG_max;
 
     // write measured torque values to DAC to avoid a signal discontinuity
-    setDAC( PSensH_current, 'B' );
-    setDAC( PSensL_current, 'A' );
-    latchDAC( );
+    set_DAC( PSensH_current, 'B' );
+    set_DAC( PSensL_current, 'A' );
+    latch_DAC( );
 
 
     // disable the signal interrupt relays
     digitalWrite( PSENS_LOW_SIGINT, HIGH );
     digitalWrite( PSENS_HIGH_SIGINT, HIGH );
 
-    controlEnabled = false;
+    control_enabled = false;
 }
 
-void calculatePedalSpoof( float pedalPosition )
+//
+void calculate_pedal_spoof( float pedal_position )
 {
     // values calculated with min/max calibration curve and hand tuned for
     // neutral balance.
     // DAC requires 12-bit values, (4096steps/5V = 819.2 steps/V)
-    PSpoofL = 819.2 * ( 0.0004 * pedalPosition + 0.366 );
-    PSpoofH = 819.2 * ( 0.0008 * pedalPosition + 0.732 );
+    PSpoofL = 819.2 * ( 0.0004 * pedal_position + 0.366 );
+    PSpoofH = 819.2 * ( 0.0008 * pedal_position + 0.732 );
 
     PSpoofL = constrain( PSpoofL, 0, 1800 ); // range = 300 - ~1750
     PSpoofH = constrain( PSpoofH, 0, 3500 ); // range = 600 - ~3500
@@ -330,11 +342,12 @@ void calculatePedalSpoof( float pedalPosition )
     //Serial.println(PSpoofH);
 }
 
+//
 void check_pedal_override( )
 {
     if ( ( PSensL_current + PSensH_current) / 2 > PEDAL_THRESH )
     {
-        disableControl( );
+        disable_control( );
         local_override = 1;
     }
     else
@@ -343,6 +356,7 @@ void check_pedal_override( )
     }
 }
 
+//
 void check_spoof_voltage( bool firstADC )
 {
     if ( firstADC == true )
@@ -394,10 +408,12 @@ void check_spoof_voltage( bool firstADC )
     Serial.println( spoof_h_voltage_read, 3 );
 
     //debug signals then writeout fail criteria.
-    //disableControl( );
+    //disable_control( );
     //local_override = 1;
 
 }
+
+
 
 
 /* ====================================== */
@@ -405,30 +421,30 @@ void check_spoof_voltage( bool firstADC )
 /* ====================================== */
 
 // A function to parse incoming serial bytes
-void processSerialByte( )
+void process_serial_byte( )
 {
     // accelerate
-    if ( incomingSerialByte == 'a' )
+    if ( incoming_serial_byte == 'a' )
     {
-        pedalPosition_target += 1000;
+        pedal_position_target += 1000;
     }
 
     // deaccelerate
-    if ( incomingSerialByte == 'd' )
+    if ( incoming_serial_byte == 'd' )
     {
-        pedalPosition_target -= 1000;
+        pedal_position_target -= 1000;
     }
 
     // return to center
-    if ( incomingSerialByte == 's' )
+    if ( incoming_serial_byte == 's' )
     {
-        pedalPosition_target = 0;
+        pedal_position_target = 0;
     }
 
     // enable/disable control
-    if ( incomingSerialByte == 'p' )
+    if ( incoming_serial_byte == 'p' )
     {
-        controlEnable_req = !controlEnable_req;
+        control_enable_req = !control_enable_req;
     }
 }
 
@@ -494,23 +510,23 @@ static void process_ps_ctrl_throttle_command(
     bool enabled = control_data->enabled == 1;
 
     // enable control from the PolySync interface
-    if( enabled == 1 && !controlEnabled )
+    if( enabled == 1 && !control_enabled )
     {
-        controlEnabled = true;
-        enableControl( );
+        control_enabled = true;
+        enable_control( );
     }
 
     // disable control from the PolySync interface
-    if( enabled == 0 && controlEnabled )
+    if( enabled == 0 && control_enabled )
     {
-        controlEnabled = false;
-        disableControl( );
+        control_enabled = false;
+        disable_control( );
     }
 
     rx_frame_ps_ctrl_throttle_command.timestamp = GET_TIMESTAMP_MS( );
 
-    pedalPosition_target = control_data->pedal_command / 24 ;
-    DEBUG_PRINT( pedalPosition_target );
+    pedal_position_target = control_data->pedal_command / 24;
+    DEBUG_PRINT( pedal_position_target );
 
 }
 
@@ -558,19 +574,22 @@ static void check_rx_timeouts( void )
     if( delta >= PS_CTRL_RX_WARN_TIMEOUT )
     {
         // disable control from the PolySync interface
-        if( controlEnabled )
+        if( control_enabled )
         {
             Serial.println( "control disabled: timeout" );
-            disableControl( );
+            disable_control( );
         }
     }
 }
+
+
 
 
 /* ====================================== */
 /* ================ SETUP =============== */
 /* ====================================== */
 
+//
 void setup( )
 {
     // zero
@@ -619,14 +638,17 @@ void setup( )
     DEBUG_PRINT( "init: pass" );
 
     // skip first iteration of DAC/ADC diagnostic test
-    initialADC = true;
+    initial_ADC = true;
 }
+
+
 
 
 /* ====================================== */
 /* ================ LOOP ================ */
 /* ====================================== */
 
+//
 void loop( )
 {
     // update the global system update timestamp, ms
@@ -645,7 +667,7 @@ void loop( )
     // if someone is pressing the throttle pedal disable control
     if ( ( PSensL_current + PSensH_current) / 2 > PEDAL_THRESH )
     {
-        disableControl( );
+        disable_control( );
         local_override = 1;
     }
     else
@@ -657,35 +679,35 @@ void loop( )
 
     check_pedal_override( );
 
-    check_spoof_voltage( initialADC );
+    check_spoof_voltage( initial_ADC );
 
     /* End Untested */
 
     // read and parse incoming serial commands
     if ( Serial.available( ) > 0 )
     {
-        incomingSerialByte = Serial.read( );
-        processSerialByte( );
+        incoming_serial_byte = Serial.read( );
+        process_serial_byte( );
     }
 
     // now that we've set control status, do throttle if we are in control
-    if ( controlEnabled )
+    if ( control_enabled )
     {
-        calculatePedalSpoof( pedalPosition_target );
+        calculate_pedal_spoof( pedal_position_target );
 
         // debug print statements
-        //Serial.print("pedalPosition_target = ");
-        //Serial.print(pedalPosition_target);
+        //Serial.print("pedal_position_target = ");
+        //Serial.print(pedal_position_target);
         //Serial.print(" Spoof error, H = ");
         //Serial.print(PSpoofH - (analogRead(PSENS_HIGH_SPOOF) << 2));
         //Serial.print(" Spoof error L = ");
         //Serial.println(PSpoofL - (analogRead(PSENS_LOW_SPOOF) << 2));
 
-        setDAC( PSpoofH, 'B' );
-        setDAC( PSpoofL, 'A' );
-        latchDAC( );
+        set_DAC( PSpoofH, 'B' );
+        set_DAC( PSpoofL, 'A' );
+        latch_DAC( );
 
-        //check_spoof_voltage( initialADC );
+        //check_spoof_voltage( initial_ADC );
     }
-    initialADC = false;
+    initial_ADC = false;
 }
